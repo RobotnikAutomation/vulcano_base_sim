@@ -417,17 +417,24 @@ namespace gazebo {
 
       // Update robot in case new velocities have been requested
       getJointReferences();
-      
       joints_[FRONT_LEFT_W]->SetVelocity(0, joint_reference_[FRONT_LEFT_W] / (wheel_diameter_ / 2.0));
       joints_[FRONT_RIGHT_W]->SetVelocity(0, joint_reference_[FRONT_RIGHT_W] / (wheel_diameter_ / 2.0));
       joints_[BACK_LEFT_W]->SetVelocity(0, joint_reference_[BACK_LEFT_W] / (wheel_diameter_ / 2.0));
       joints_[BACK_RIGHT_W]->SetVelocity(0, joint_reference_[BACK_RIGHT_W] / (wheel_diameter_ / 2.0));
-      
+
+      /*
+      ROS_INFO("flw: %5.2f frw: %5.2f blw: %5.2f brw: %5.2f", 
+                joint_reference_[FRONT_LEFT_W] / (wheel_diameter_ / 2.0),
+                joint_reference_[FRONT_RIGHT_W] / (wheel_diameter_ / 2.0),
+                joint_reference_[BACK_LEFT_W] / (wheel_diameter_ / 2.0),
+                joint_reference_[BACK_RIGHT_W] / (wheel_diameter_ / 2.0)
+                );
+      */      
       joints_[FRONT_LEFT_MW]->SetAngle(0, joint_reference_[FRONT_LEFT_MW]);
       joints_[FRONT_RIGHT_MW]->SetAngle(0, joint_reference_[FRONT_RIGHT_MW]);
       joints_[BACK_LEFT_MW]->SetAngle(0, joint_reference_[BACK_LEFT_MW]);
       joints_[BACK_RIGHT_MW]->SetAngle(0, joint_reference_[BACK_RIGHT_MW]);
-
+     
       last_update_time_+= common::Time(update_period_);
       }
   }
@@ -468,7 +475,8 @@ void OmniDrivePlugin::getJointReferences()
 	  double x1 = L/2.0; double y1 = - W/2.0;
 	  double wx1 = v_ref_x_ - w_ref_ * y1;
 	  double wy1 = v_ref_y_ + w_ref_ * x1;
-	  double q1 = -sqrt( wx1*wx1 + wy1*wy1 );
+	  //double q1 = -sqrt( wx1*wx1 + wy1*wy1 ); // for mirrored traction
+	  double q1 = sqrt( wx1*wx1 + wy1*wy1 );
 	  double a1 = radnorm( atan2( wy1, wx1 ) );
 	  double x2 = L/2.0; double y2 = W/2.0;
 	  double wx2 = v_ref_x_ - w_ref_ * y2;
@@ -483,7 +491,8 @@ void OmniDrivePlugin::getJointReferences()
 	  double x4 = -L/2.0; double y4 = -W/2.0;
 	  double wx4 = v_ref_x_ - w_ref_ * y4;
 	  double wy4 = v_ref_y_ + w_ref_ * x4;
-	  double q4 = -sqrt( wx4*wx4 + wy4*wy4 );
+	  //double q4 = -sqrt( wx4*wx4 + wy4*wy4 );
+	  double q4 = sqrt( wx4*wx4 + wy4*wy4 );
 	  double a4 = radnorm( atan2( wy4, wx4 ) );
 	  
       //ROS_INFO("q1234=(%5.2f, %5.2f, %5.2f, %5.2f)   a1234=(%5.2f, %5.2f, %5.2f, %5.2f)", q1,q2,q3,q4, a1,a2,a3,a4);
