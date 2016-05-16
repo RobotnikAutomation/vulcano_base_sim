@@ -2,16 +2,17 @@
 <launch>
 
   <!-- load the controllers -->
-  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false"
-    output="screen" ns="/vulcano_base" args="--namespace=/vulcano_base
-                      joint_blw_velocity_controller
+  <!-- note: load these controllers only if the joints are not going to be controlled by the provided omnidrive plugin -->
+  <!--                joint_blw_velocity_controller
                       joint_brw_velocity_controller
                       joint_frw_velocity_controller
                       joint_flw_velocity_controller
                       joint_blw_position_controller
                       joint_brw_position_controller
                       joint_frw_position_controller
-                      joint_flw_position_controller
+                      joint_flw_position_controller  -->
+
+  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" ns="/vulcano_base" args="--namespace=/vulcano_base
                       joint_read_state_controller
                       "/>
 
