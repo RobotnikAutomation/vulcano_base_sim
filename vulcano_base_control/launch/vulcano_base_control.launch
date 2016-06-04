@@ -12,7 +12,7 @@
                       joint_frw_position_controller
                       joint_flw_position_controller  -->
 
-  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" ns="/vulcano_base" args="--namespace=/vulcano_base
+  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" ns="/vulcano_base" args="--shutdown-time 1 --namespace=/vulcano_base
                       joint_read_state_controller
                       "/>
 
