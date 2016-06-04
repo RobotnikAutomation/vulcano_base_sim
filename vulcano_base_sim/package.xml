@@ -1,0 +1,22 @@
+<package>
+  <name>vulcano_base_sim</name>
+  <version>1.0.0</version>
+  <description>Simulation Metapackage of the Vulcano Base Omnidirectional Robot.</description>
+
+  <license>BSD</license>
+
+  <url type="website">http://ros.org/wiki/vulcano_base_sim</url>
+  <url type="bugtracker">https://github.com/RobotnikAutomation/vulcano_base_sim/issues</url>
+
+  <author email="info@robotnik.es">Robotnik</author>
+
+  <maintainer email="info@robotnik.es">Robotnik</maintainer>
+  
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <run_depend>vulcano_base_common</run_depend>
+
+  <export>
+    <metapackage/>
+  </export>
+</package>
