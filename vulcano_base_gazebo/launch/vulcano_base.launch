@@ -29,4 +29,9 @@
   <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
         args="-urdf -model vulcano_base -param robot_description"/>
 
+
+  <!-- vulcano_base_pad launch file -->
+  <include file="$(find vulcano_base_pad)/launch/vulcano_base_pad.launch" />
+
+
 </launch>
