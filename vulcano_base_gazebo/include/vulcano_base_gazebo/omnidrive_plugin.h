@@ -26,6 +26,10 @@
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
 
+// Odometry options
+#define WORLD       0
+#define ENCODER     1
+
 namespace gazebo {
 
   class Joint;
@@ -132,6 +136,9 @@ namespace gazebo {
       double update_period_;
       common::Time last_update_time_;
       
+      // Mirrored axes
+      bool mirrored_axes_;
+      double spin_;
       
 
   };

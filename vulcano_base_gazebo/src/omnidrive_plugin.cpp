@@ -39,15 +39,6 @@ namespace gazebo {
       return(d2);
   }
   
-/*
-  enum {
-	RIGHT_FRONT=0,
-	LEFT_FRONT=1,
-    RIGHT_BACK=2,
-    LEFT_BACK=3,
-  };
-*/
-
   enum {
 	FRONT_RIGHT_W=0,
 	FRONT_LEFT_W=1,
@@ -148,7 +139,7 @@ namespace gazebo {
     else
       joint_back_left_motor_wheel_name_ = _sdf->GetElement("backLeftMotorWheelJoint")->Get<std::string>();
         
-    wheel_diameter_ = 0.15;
+    wheel_diameter_ = 0.186;
     if (!_sdf->HasElement("wheelDiameter")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <wheelDiameter>, defaults to %f",
 	       robot_namespace_.c_str(),wheel_diameter_);
@@ -156,7 +147,7 @@ namespace gazebo {
       wheel_diameter_ = _sdf->GetElement("wheelDiameter")->Get<double>();
     
     
-    wheel_base_ = 0.933;
+    wheel_base_ = 0.934;
     if (!_sdf->HasElement("wheelBase")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <wheelBase>, defaults to value from robot_description: %f",
 	       robot_namespace_.c_str(), wheel_base_);
@@ -219,11 +210,27 @@ namespace gazebo {
           robot_namespace_.c_str(), update_rate_);
     else
       update_rate_ = _sdf->GetElement("updateRate")->Get<double>();
-        
-    /* std::map<std::string, OdomSource> odomOptions;
-    odomOptions["encoder"] = ENCODER;
-    odomOptions["world"] = WORLD;*/
 
+	// Odometry source
+	odom_type_ = WORLD; 
+	std::string odom_source;
+	if (!_sdf->HasElement("odometrySource"))
+		ROS_WARN("OmniDrivePlugin (ns = %s) missing <odometrySource>, defaults to 'world'", robot_namespace_.c_str());
+	else {
+	    odom_source = _sdf->GetElement("odometrySource")->Get<std::string>();		    
+	    if (odom_source == "world") odom_type_ = WORLD;
+	    else if (odom_source == "encoder") odom_type_ = ENCODER;
+	    else ROS_ERROR("<odometrySource> tag not recognized, defaults to 'world'");
+		}
+    
+    this->mirrored_axes_ = false;
+    spin_ = 1.0;
+    if (!_sdf->HasElement("mirrored_axes")) 
+      ROS_WARN("SkidSteeringPlugin (ns = %s) missing <mirrored_axes>, defaults to false", robot_namespace_.c_str());
+    else 
+      this->mirrored_axes_ = _sdf->GetElement("mirrored_axes")->Get<bool>(); 
+    if (this->mirrored_axes_) spin_ = -1.0;
+     
     // Initialize update rate stuff
     if (update_rate_ > 0.0)
       update_period_ = 1.0 / update_rate_;
@@ -466,33 +473,31 @@ void OmniDrivePlugin::getJointReferences()
     boost::mutex::scoped_lock scoped_lock(lock);
 
 	  // Speed references for motor control	  
-	  double vx = v_ref_x_;
-	  double vy = v_ref_y_;
-	  double w = w_ref_;
+	  double vx = -v_ref_x_;
+	  double vy = -v_ref_y_;
+	  double w = -w_ref_;
 	  double L = wheel_base_;   
 	  double W = track_width_;
 	  
 	  double x1 = L/2.0; double y1 = - W/2.0;
-	  double wx1 = v_ref_x_ - w_ref_ * y1;
-	  double wy1 = v_ref_y_ + w_ref_ * x1;
-	  //double q1 = -sqrt( wx1*wx1 + wy1*wy1 ); // for mirrored traction
-	  double q1 = sqrt( wx1*wx1 + wy1*wy1 );
+	  double wx1 = vx - w * y1;
+	  double wy1 = vy + w * x1;
+	  double q1 = spin_ * sqrt( wx1*wx1 + wy1*wy1 ); // spin for mirrored traction	   
 	  double a1 = radnorm( atan2( wy1, wx1 ) );
 	  double x2 = L/2.0; double y2 = W/2.0;
-	  double wx2 = v_ref_x_ - w_ref_ * y2;
-	  double wy2 = v_ref_y_ + w_ref_ * x2;
+	  double wx2 = vx - w * y2;
+	  double wy2 = vy + w * x2;
 	  double q2 = sqrt( wx2*wx2 + wy2*wy2 );
 	  double a2 = radnorm( atan2( wy2, wx2 ) );
 	  double x3 = -L/2.0; double y3 = W/2.0;
-	  double wx3 = v_ref_x_ - w_ref_ * y3;
-	  double wy3 = v_ref_y_ + w_ref_ * x3;
+	  double wx3 = vx - w * y3;
+	  double wy3 = vy + w * x3;
 	  double q3 = sqrt( wx3*wx3 + wy3*wy3 );
 	  double a3 = radnorm( atan2( wy3, wx3 ) );
 	  double x4 = -L/2.0; double y4 = -W/2.0;
-	  double wx4 = v_ref_x_ - w_ref_ * y4;
-	  double wy4 = v_ref_y_ + w_ref_ * x4;
-	  //double q4 = -sqrt( wx4*wx4 + wy4*wy4 );
-	  double q4 = sqrt( wx4*wx4 + wy4*wy4 );
+	  double wx4 = vx - w * y4;
+	  double wy4 = vy + w * x4;
+	  double q4 = spin_ * sqrt( wx4*wx4 + wy4*wy4 ); // spin for mirrored traction
 	  double a4 = radnorm( atan2( wy4, wx4 ) );
 	  
       //ROS_INFO("q1234=(%5.2f, %5.2f, %5.2f, %5.2f)   a1234=(%5.2f, %5.2f, %5.2f, %5.2f)", q1,q2,q3,q4, a1,a2,a3,a4);
@@ -559,19 +564,21 @@ void OmniDrivePlugin::getJointReferences()
     a3 = radnorm2( joints_[BACK_LEFT_MW]->GetAngle(0).Radian() );
     a4 = radnorm2( joints_[BACK_RIGHT_MW]->GetAngle(0).Radian() );
 	  	        
-    double v1x = -v1 * cos( a1 ); double v1y = -v1 * sin( a1 );
-    double v2x = v2 * cos( a2 ); double v2y = v2 * sin( a2 );
-    double v3x = v3 * cos( a3 ); double v3y = v3 * sin( a3 );
-    double v4x = -v4 * cos( a4 ); double v4y = -v4 * sin( a4 );
+    double v1x = -spin_ * v1 * cos( a1 ); double v1y = -spin_ * v1 * sin( a1 );  // spin for mirrored axes    
+    double v2x = -v2 * cos( a2 ); double v2y = -v2 * sin( a2 );
+    double v3x = -v3 * cos( a3 ); double v3y = -v3 * sin( a3 );
+    double v4x = -spin_ * v4 * cos( a4 ); double v4y = -spin_ * v4 * sin( a4 );
     double C = (v4y + v1y) / 2.0;
     double B = (v2x + v1x) / 2.0;
     double D = (v2y + v3y) / 2.0;
     double A = (v3x + v4x) / 2.0;
-
-    double w = ( (B-A)/wheel_base_ + (D-C)/track_width_ ) / 2.0;
-    double vx, vy;
-    vx = (A+B) / 2.0;
-    vy = (C+D) / 2.0;      	  
+    double E = (v1y + v2y) / 2.0;
+    double F = (v3y + v4y) / 2.0;
+    double G = (v1x + v4x) / 2.0;
+    double H = (v2x + v3x) / 2.0;
+    double w = ((E-F)/wheel_base_ + (G-H)/track_width_) / 2.0;
+    double vx = (A+B) / 2.0;
+    double vy = (C+D) / 2.0; 
 
 	// Get real freq.
     common::Time current_time = parent->GetWorld()->GetSimTime();
@@ -613,8 +620,8 @@ void OmniDrivePlugin::getJointReferences()
     tf::Quaternion qt;
     tf::Vector3 vt;
 
-    if(odom_type_){
-      //getting data from encoder integration
+    if(odom_type_==ENCODER){
+      // getting data from encoder integration
       qt = tf::Quaternion (odom_.pose.pose.orientation.x, odom_.pose.pose.orientation.y, odom_.pose.pose.orientation.z, odom_.pose.pose.orientation.w );
       vt = tf::Vector3 ( odom_.pose.pose.position.x, odom_.pose.pose.position.y, odom_.pose.pose.position.z );
     }
