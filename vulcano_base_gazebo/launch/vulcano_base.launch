@@ -4,16 +4,30 @@
   <!-- roslaunch arguments -->
   <arg name="debug" default="false"/>
   <arg name="gui" default="true"/>
+  <arg name="gazebo_world" default="vulcano_base"/>
 
-  <!-- vulcano_base_control launch file -->
-  <include file="$(find vulcano_base_control)/launch/vulcano_base_control.launch" />
+  <!-- vulcano_base_state: loads robot description and launches robot_state_publisher -->
+  <group ns="vulcano_base" >
 
+    <include file="$(find vulcano_base_description)/launch/vulcano_base_state.launch" />
+           
+    <!-- Call a python script to the run a service call to gazebo_ros to spawn a URDF robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+          args="-urdf -model vulcano_base -param robot_description"/>
+  
+    <!-- vulcano_base_control launch file -->
+    <include file="$(find vulcano_base_control)/launch/vulcano_base_control.launch" />
+    
+    <!-- state_publisher launch file: launches joint_state controllers -->
+    <include file="$(find vulcano_base_gazebo)/launch/state_publisher.launch" />
+
+  </group>
   <!-- launch pad -->
   <!-- include file="$(find vulcano_base_pad)/launch/vulcano_base_pad.launch" / -->
 
   <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(find vulcano_base_gazebo)/worlds/vulcano_base.world"/>
+    <arg name="world_name" value="$(find vulcano_base_gazebo)/worlds/$(arg gazebo_world).world"/>
     <arg name="debug" value="$(arg debug)" />
     <arg name="gui" value="$(arg gui)" />
     <arg name="paused" value="false"/>
@@ -21,17 +35,6 @@
     <arg name="headless" value="false"/>
   </include>
 
-  <!-- Load the URDF into the ROS Parameter Server -->
-  <param name="robot_description"
-         command="$(find xacro)/xacro.py '$(find vulcano_base_description)/robots/vulcano_base.urdf.xacro'" />
-         
-  <!-- Call a python script to the run a service call to gazebo_ros to spawn a URDF robot -->
-  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
-        args="-urdf -model vulcano_base -param robot_description"/>
-
-
-  <!-- vulcano_base_pad launch file -->
-  <include file="$(find vulcano_base_pad)/launch/vulcano_base_pad.launch" />
-
+  <node name="rviz" type="rviz" pkg="rviz" />
 
 </launch>
