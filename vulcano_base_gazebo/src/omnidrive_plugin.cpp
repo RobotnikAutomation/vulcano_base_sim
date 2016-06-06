@@ -51,12 +51,13 @@ namespace gazebo {
   };
 
 
-  OmniDrivePlugin::OmniDrivePlugin() {}
+  OmniDrivePlugin::OmniDrivePlugin() {  }
 
   // Destructor
   OmniDrivePlugin::~OmniDrivePlugin() {
-    delete rosnode_;
     delete transform_broadcaster_;
+    rosnode_->shutdown();
+    delete rosnode_;
   }
 
   // Load the controller
@@ -81,28 +82,28 @@ namespace gazebo {
        broadcast_tf_ = _sdf->GetElement("broadcastTF")->Get<bool>();
    
     // Wheels
-    joint_front_right_wheel_name_ = "joint_front_right_wheel";
+    joint_front_right_wheel_name_ = "front_right_wheel_joint";
     if (!_sdf->HasElement("frontRightWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <frontRightWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_front_right_wheel_name_.c_str());
     else
       joint_front_right_wheel_name_ = _sdf->GetElement("frontRightWheelJoint")->Get<std::string>();
     
-    joint_front_left_wheel_name_ = "joint_front_left_wheel";
+    joint_front_left_wheel_name_ = "front_left_wheel_joint";
     if (!_sdf->HasElement("frontLeftWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <frontLeftWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_front_left_wheel_name_.c_str());
     else
       joint_front_left_wheel_name_ = _sdf->GetElement("frontLeftWheelJoint")->Get<std::string>();
      
-    joint_back_right_wheel_name_ = "joint_back_right_wheel";
+    joint_back_right_wheel_name_ = "back_right_wheel_joint";
     if (!_sdf->HasElement("backRightWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <backRightWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_back_right_wheel_name_.c_str());
     else
       joint_back_right_wheel_name_ = _sdf->GetElement("backRightWheelJoint")->Get<std::string>();
 
-    joint_back_left_wheel_name_ = "joint_back_left_wheel";
+    joint_back_left_wheel_name_ = "back_left_wheel_joint";
     if (!_sdf->HasElement("backLeftWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <backLeftWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_back_left_wheel_name_.c_str());
@@ -111,28 +112,28 @@ namespace gazebo {
 
 
     // Motor Wheels
-    joint_front_right_motor_wheel_name_ = "joint_front_right_motor_wheel";
+    joint_front_right_motor_wheel_name_ = "front_right_motor_wheel_joint";
     if (!_sdf->HasElement("frontRightMotorWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <frontRightMotorWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_front_right_motor_wheel_name_.c_str());
     else
       joint_front_right_motor_wheel_name_ = _sdf->GetElement("frontRightMotorWheelJoint")->Get<std::string>();
     
-    joint_front_left_motor_wheel_name_ = "joint_front_left_motor_wheel";
+    joint_front_left_motor_wheel_name_ = "front_left_motor_wheel_joint";
     if (!_sdf->HasElement("frontLeftMotorWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <frontLeftMotorWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_front_left_motor_wheel_name_.c_str());
     else
       joint_front_left_motor_wheel_name_ = _sdf->GetElement("frontLeftMotorWheelJoint")->Get<std::string>();
      
-    joint_back_right_motor_wheel_name_ = "joint_back_right_motor_wheel";
+    joint_back_right_motor_wheel_name_ = "back_right_motor_wheel_joint";
     if (!_sdf->HasElement("backRightMotorWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <backRightMotorWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_back_right_motor_wheel_name_.c_str());
     else
       joint_back_right_motor_wheel_name_ = _sdf->GetElement("backRightMotorWheelJoint")->Get<std::string>();
 
-    joint_back_left_motor_wheel_name_ = "joint_back_left_motor_wheel";
+    joint_back_left_motor_wheel_name_ = "back_left_motor_wheel_joint";
     if (!_sdf->HasElement("backLeftMotorWheelJoint")) 
       ROS_WARN("OmniDrivePlugin Plugin (ns = %s) missing <backLeftMotorWheelJoint>, defaults to \"%s\"",
 	       robot_namespace_.c_str(), joint_back_left_motor_wheel_name_.c_str());
@@ -591,6 +592,7 @@ void OmniDrivePlugin::getJointReferences()
     pose_encoder_.x += vx * fSamplePeriod;
     pose_encoder_.y += vy * fSamplePeriod;
     // ROS_INFO("Odom estimated x=%5.2f  y=%5.2f a=%5.2f", robot_pose_px_, robot_pose_py_, robot_pose_pa_);
+
 
     tf::Quaternion qt;
     tf::Vector3 vt;
