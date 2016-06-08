@@ -7,10 +7,6 @@ topics:
   topic   : move_base/cmd_vel
   timeout : 0.5
   priority: 2
-- name    : external
-  topic   : cmd_vel
-  timeout : 0.5
-  priority: 1
 
 locks:
 - name    : e_stop
