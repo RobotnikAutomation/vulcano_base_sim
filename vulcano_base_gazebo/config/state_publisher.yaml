@@ -1,7 +1,0 @@
-#vulcano_base:
-#  joint_read_state_controller:
-#    type: joint_state_controller/JointStateController 
-#    publish_rate: 100.0
-joint_read_state_controller:
-  type: joint_state_controller/JointStateController 
-  publish_rate: 100.0

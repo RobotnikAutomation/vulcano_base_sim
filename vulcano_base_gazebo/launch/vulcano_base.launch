@@ -6,24 +6,29 @@
   <arg name="gui" default="true"/>
   <arg name="gazebo_world" default="vulcano_base"/>
 
-  <!-- vulcano_base_state: loads robot description and launches robot_state_publisher -->
-  <group ns="vulcano_base" >
+  <group ns="vulcano" >
 
+    <!-- uploads robot_description and runs robot_state_publisher -->
     <include file="$(find vulcano_base_description)/launch/vulcano_base_state.launch" />
            
     <!-- Call a python script to the run a service call to gazebo_ros to spawn a URDF robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
-          args="-urdf -model vulcano_base -param robot_description"/>
+          args="-urdf -model vulcano -param robot_description"/>
   
     <!-- vulcano_base_control launch file -->
     <include file="$(find vulcano_base_control)/launch/vulcano_base_control.launch" />
     
-    <!-- state_publisher launch file: launches joint_state controllers -->
-    <include file="$(find vulcano_base_gazebo)/launch/state_publisher.launch" />
+    <!-- to publish joint_state -->
+    <include file="$(find vulcano_base_gazebo)/launch/joint_state_controller.launch" />
 
+    <!-- launch pad -->
+    <include file="$(find vulcano_base_pad)/launch/vulcano_base_pad.launch" />
+
+    <!-- launch rviz -->
+    <group if="$(arg gui)">
+        <node name="rviz" type="rviz" pkg="rviz" args="-d $(find vulcano_base_description)/launch/vulcano_base.rviz" />
+    </group>
   </group>
-  <!-- launch pad -->
-  <!-- include file="$(find vulcano_base_pad)/launch/vulcano_base_pad.launch" / -->
 
   <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
@@ -35,6 +40,5 @@
     <arg name="headless" value="false"/>
   </include>
 
-  <node name="rviz" type="rviz" pkg="rviz" />
 
 </launch>
