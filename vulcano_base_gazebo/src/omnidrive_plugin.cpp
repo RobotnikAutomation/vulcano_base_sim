@@ -468,40 +468,56 @@ double OmniDrivePlugin::radnorm2( double value )
   return value;
 }
 
+double OmniDrivePlugin::radnormHalf( double value)
+{
+double eps = 1e-5;
+ while (value > 0.5*M_PI + eps) value -= M_PI;
+ while (value < -0.5*M_PI - eps) value += M_PI;
+ return value;
+}
+double OmniDrivePlugin::sign( double value)
+{
+    return (value < 0) ? -1 : 1;
+}
 
 void OmniDrivePlugin::getJointReferences()
   {
     boost::mutex::scoped_lock scoped_lock(lock);
 
 	  // Speed references for motor control	  
-	  double vx = -v_ref_x_;
-	  double vy = -v_ref_y_;
-	  double w = -w_ref_;
+	  double vx = v_ref_x_;
+	  double vy = v_ref_y_;
+	  double w = w_ref_;
 	  double L = wheel_base_;   
 	  double W = track_width_;
 	  
-	  double x1 = L/2.0; double y1 = - W/2.0;
-	  double wx1 = vx - w * y1;
+	  double x1 = L/2.0; double y1 = W/2.0;
+	  double wx1 = vx + w * y1;
 	  double wy1 = vy + w * x1;
-	  double q1 = spin_ * sqrt( wx1*wx1 + wy1*wy1 ); // spin for mirrored traction	   
-	  double a1 = radnorm( atan2( wy1, wx1 ) );
+	  double q1 = - sign(wx1) * sqrt( wx1*wx1 + wy1*wy1 ); // spin for mirrored traction	   
+	  //double a1 = radnorm( atan2( wy1, wx1 ) );
+	  double a1 = radnormHalf( atan2( wy1,wx1 ));
 	  double x2 = L/2.0; double y2 = W/2.0;
 	  double wx2 = vx - w * y2;
 	  double wy2 = vy + w * x2;
-	  double q2 = sqrt( wx2*wx2 + wy2*wy2 );
-	  double a2 = radnorm( atan2( wy2, wx2 ) );
-	  double x3 = -L/2.0; double y3 = W/2.0;
+	  double q2 = sign(wx2) * sqrt( wx2*wx2 + wy2*wy2 );
+	  //double a2 = radnorm( atan2( wy2, wx2 ) );
+	  double a2 = radnormHalf( atan2 (wy2,wx2));
+	  double x3 = L/2.0; double y3 = W/2.0;
 	  double wx3 = vx - w * y3;
-	  double wy3 = vy + w * x3;
-	  double q3 = sqrt( wx3*wx3 + wy3*wy3 );
-	  double a3 = radnorm( atan2( wy3, wx3 ) );
-	  double x4 = -L/2.0; double y4 = -W/2.0;
-	  double wx4 = vx - w * y4;
-	  double wy4 = vy + w * x4;
-	  double q4 = spin_ * sqrt( wx4*wx4 + wy4*wy4 ); // spin for mirrored traction
-	  double a4 = radnorm( atan2( wy4, wx4 ) );
+	  double wy3 = vy - w * x3;
+	  double q3 = sign(wx3)*sqrt( wx3*wx3 + wy3*wy3 );
+	  //double a3 = radnorm( atan2( wy3, wx3 ) );
+	  double a3 = radnormHalf( atan2(wy3 , wx3));
+	  double x4 = L/2.0; double y4 = W/2.0;
+	  double wx4 = vx + w * y4;
+	  double wy4 = vy - w * x4;
+	  double q4 = -sign(wx4)*sqrt( wx4*wx4 + wy4*wy4 ); // spin for mirrored traction
+	  //double a4 = radnorm( atan2( wy4, wx4 ) );
+	  double a4 = radnormHalf( atan2(wy4,wx4));
 	  
-      //ROS_INFO("q1234=(%5.2f, %5.2f, %5.2f, %5.2f)   a1234=(%5.2f, %5.2f, %5.2f, %5.2f)", q1,q2,q3,q4, a1,a2,a3,a4);
+	  //ROS_INFO("wy1 wx1 %5.2f %5.2f", wy1, wx1);
+      //ROS_INFO_THROTTLE(1,"q1234=(%5.2f, %5.2f, %5.2f, %5.2f)   a1234=(%5.2f, %5.2f, %5.2f, %5.2f)", q1,q2,q3,q4, a1,a2,a3,a4);
 	
 	  // Motor control actions	  
 	  // Axis are not reversed in the omni (swerve) configuration
@@ -559,16 +575,22 @@ void OmniDrivePlugin::getJointReferences()
 	v3 = joints_[BACK_LEFT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0);
 	v4 = joints_[BACK_RIGHT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0);
 	// Angular pos of each wheel
-    double a1, a2, a3, a4;
-    a1 = radnorm2( joints_[FRONT_RIGHT_MW]->GetAngle(0).Radian() );  
-    a2 = radnorm2( joints_[FRONT_LEFT_MW]->GetAngle(0).Radian() );
-    a3 = radnorm2( joints_[BACK_LEFT_MW]->GetAngle(0).Radian() );
-    a4 = radnorm2( joints_[BACK_RIGHT_MW]->GetAngle(0).Radian() );
+    double a1, a2, a3, a4; 
+    double aa2;
+    a1 = ( joints_[FRONT_RIGHT_MW]->GetAngle(0).Radian() );  
+    a2 = ( joints_[FRONT_LEFT_MW]->GetAngle(0).Radian() );
+    a3 = ( joints_[BACK_LEFT_MW]->GetAngle(0).Radian() );
+    a4 = ( joints_[BACK_RIGHT_MW]->GetAngle(0).Radian() );
 	  	        
-    double v1x = -spin_ * v1 * cos( a1 ); double v1y = -spin_ * v1 * sin( a1 );  // spin for mirrored axes    
-    double v2x = -v2 * cos( a2 ); double v2y = -v2 * sin( a2 );
-    double v3x = -v3 * cos( a3 ); double v3y = -v3 * sin( a3 );
-    double v4x = -spin_ * v4 * cos( a4 ); double v4y = -spin_ * v4 * sin( a4 );
+//    double v1x = -spin_ * v1 * cos( a1 ); double v1y = -spin_ * v1 * sin( a1 );  // spin for mirrored axes    
+//    double v2x = -v2 * cos( a2 ); double v2y = -v2 * sin( a2 );
+//    double v3x = -v3 * cos( a3 ); double v3y = -v3 * sin( a3 );
+//    double v4x = -spin_ * v4 * cos( a4 ); double v4y = -spin_ * v4 * sin( a4 );
+    double v1x = -v1 * cos( a1 ); double v1y = -v1 * sin( a1 ); 
+    double v2x = v2 * cos( a2 ); double v2y = v2 * sin( a2 );
+    double v3x = v3 * cos( a3 ); double v3y = v3 * sin( a3 );
+    double v4x = -v4 * cos( a4 ); double v4y = -v4 * sin( a4 );
+    
     double C = (v4y + v1y) / 2.0;
     double B = (v2x + v1x) / 2.0;
     double D = (v2y + v3y) / 2.0;
@@ -588,11 +610,10 @@ void OmniDrivePlugin::getJointReferences()
 
     // Compute Position
     double fSamplePeriod = seconds_since_last_update;
+    pose_encoder_.x += cos(pose_encoder_.theta) * vx * fSamplePeriod + cos(M_PI_2 + pose_encoder_.theta) * vy * fSamplePeriod;
+    pose_encoder_.y += sin(pose_encoder_.theta) * vx * fSamplePeriod + sin(M_PI_2 + pose_encoder_.theta) * vy * fSamplePeriod;
 	pose_encoder_.theta += w * fSamplePeriod;  
-    pose_encoder_.x += vx * fSamplePeriod;
-    pose_encoder_.y += vy * fSamplePeriod;
     // ROS_INFO("Odom estimated x=%5.2f  y=%5.2f a=%5.2f", robot_pose_px_, robot_pose_py_, robot_pose_pa_);
-
 
     tf::Quaternion qt;
     tf::Vector3 vt;

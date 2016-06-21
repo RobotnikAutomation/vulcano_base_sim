@@ -57,6 +57,8 @@ namespace gazebo {
       double saturation(double u, double min, double max);
       double radnorm( double value );
       double radnorm2( double value ); 
+      double radnormHalf( double value ); 
+      double sign( double value ); 
 
       void getJointReferences();
       
