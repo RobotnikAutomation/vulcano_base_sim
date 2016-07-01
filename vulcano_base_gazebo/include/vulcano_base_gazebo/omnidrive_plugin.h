@@ -25,10 +25,13 @@
 // Boost
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
+#include <boost/circular_buffer.hpp>
 
 // Odometry options
 #define WORLD       0
 #define ENCODER     1
+
+#define NUMBER_OF_JOINTS 8
 
 namespace gazebo {
 
@@ -58,7 +61,12 @@ namespace gazebo {
       double radnorm( double value );
       double radnorm2( double value ); 
       double radnormHalf( double value ); 
+      double normToZero(double value);
       double sign( double value ); 
+      bool checkSign(double v, double w);
+
+      void normJointReference(double &q, double &a, double cq, double ca);
+      void setJointReferenceBetweenMotorWheelLimits(double &wheel_speed, double &wheel_angle, int joint_number);
 
       void getJointReferences();
       
@@ -90,9 +98,14 @@ namespace gazebo {
       double wheel_torque_;
       
       double motor_wheel_torque_;
-      double joint_reference_[8];
+      double joint_reference_[NUMBER_OF_JOINTS];
 
-      physics::JointPtr joints_[8];
+	  std::vector<double> joint_state_mean_;
+	  void UpdateJointStateHistoryMean();
+      unsigned int joint_state_history_size_;
+      std::vector<boost::circular_buffer<double> > joint_state_history_;
+
+      physics::JointPtr joints_[NUMBER_OF_JOINTS];
 
       // ROS STUFF
       ros::NodeHandle* rosnode_;

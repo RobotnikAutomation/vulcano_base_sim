@@ -16,6 +16,7 @@
 #include <nav_msgs/Odometry.h>
 #include <boost/bind.hpp>
 #include <boost/thread/mutex.hpp>
+#include <boost/circular_buffer.hpp>
 
 namespace gazebo {
 
@@ -227,11 +228,24 @@ namespace gazebo {
     this->mirrored_axes_ = false;
     spin_ = 1.0;
     if (!_sdf->HasElement("mirrored_axes")) 
-      ROS_WARN("SkidSteeringPlugin (ns = %s) missing <mirrored_axes>, defaults to false", robot_namespace_.c_str());
+      ROS_WARN("OmniDrivePlugin (ns = %s) missing <mirrored_axes>, defaults to false", robot_namespace_.c_str());
     else 
       this->mirrored_axes_ = _sdf->GetElement("mirrored_axes")->Get<bool>(); 
     if (this->mirrored_axes_) spin_ = -1.0;
-     
+    
+
+    joint_state_history_size_ = update_rate_;
+    if (!_sdf->HasElement("jointStateHistorySize"))
+        ROS_WARN("OmniDrivePlugin (ns = %s) missing jointStateHistorySize, defaults to %u (updateRate)", robot_namespace_.c_str(), joint_state_history_size_);
+    else
+      joint_state_history_size_ = _sdf->GetElement("jointStateHistorySize")->Get<unsigned int>(); 
+
+    joint_state_mean_.resize(NUMBER_OF_JOINTS);
+    joint_state_history_.resize(NUMBER_OF_JOINTS);
+    for (int i = 0; i < NUMBER_OF_JOINTS; i++) {
+        joint_state_history_[i] = boost::circular_buffer<double>(joint_state_history_size_);
+    }
+
     // Initialize update rate stuff
     if (update_rate_ > 0.0)
       update_period_ = 1.0 / update_rate_;
@@ -469,15 +483,76 @@ double OmniDrivePlugin::radnorm2( double value )
 }
 
 double OmniDrivePlugin::radnormHalf( double value)
-{
+{ //norms the angle so it is between -M_PI/2 and M_PI/2
 double eps = 1e-5;
  while (value > 0.5*M_PI + eps) value -= M_PI;
  while (value < -0.5*M_PI - eps) value += M_PI;
  return value;
 }
+
+//norms a double value so if it is rounded to zero when it's below an epsylon
+double OmniDrivePlugin::normToZero(double value)
+{
+    double eps = 1e-4;
+    if (std::abs(value) < eps)
+        return 0;
+    return value;
+}
+
+//return the sign, as -1 or 1, of the value. 0 is positive
 double OmniDrivePlugin::sign( double value)
 {
     return (value < 0) ? -1 : 1;
+}
+
+//checks that v and w have the same sign. 0 is positive
+bool OmniDrivePlugin::checkSign(double v, double w)
+{
+    return (v < 0) == (w < 0);
+}
+
+//wheels can operate forward or backward, so each pair of angle+velocity has it's mirrored pair that results in the same movement
+//this function checks which one of both keeps the less change from the current configuration
+void OmniDrivePlugin::normJointReference(double &wheel_speed, double &wheel_angle, double current_wheel_speed, double current_wheel_angle)
+{
+    double mirrored_wheel_speed = -wheel_speed;
+    double mirrored_wheel_angle = (wheel_angle > 0) ? wheel_angle - M_PI : wheel_angle + M_PI;
+
+    double change = std::abs(wheel_speed-current_wheel_speed)*std::abs(wheel_angle-current_wheel_angle);
+    double mirrored_change = std::abs(mirrored_wheel_speed-current_wheel_speed)*std::abs(mirrored_wheel_angle-current_wheel_angle);
+
+    if (mirrored_change < change)
+    {
+        wheel_speed = mirrored_wheel_speed;
+        wheel_angle = mirrored_wheel_angle;
+    }
+}
+
+//as the motorwheels can only rotate between their lower and upper limits, this function checks that the reference is between that limit
+//if it isn't, sets the mirrored pair
+void OmniDrivePlugin::setJointReferenceBetweenMotorWheelLimits(double &wheel_speed, double &wheel_angle, int joint_number)
+{
+    double lower_limit = joints_[joint_number]->GetLowerLimit(0).Radian();
+    double upper_limit = joints_[joint_number]->GetUpperLimit(0).Radian();
+
+    // if angle is between limits, do nothing
+    if (lower_limit <= wheel_angle && wheel_angle <= upper_limit)    
+        return;
+
+    // if angle is below the lower_limit, add pi and change speed sign
+    if (wheel_angle < lower_limit) {
+        wheel_angle += M_PI;
+        wheel_speed = -wheel_speed;
+        return;
+        ROS_INFO_THROTTLE(1, "angle below limit");
+    }
+    // if angle is above the upper_limit, substract pi and change speed sign
+    if (upper_limit < wheel_angle) {
+        wheel_angle -= M_PI;
+        wheel_speed = -wheel_speed;
+        ROS_INFO_THROTTLE(1, "angle above limit");
+        return;
+    }
 }
 
 void OmniDrivePlugin::getJointReferences()
@@ -491,31 +566,54 @@ void OmniDrivePlugin::getJointReferences()
 	  double L = wheel_base_;   
 	  double W = track_width_;
 	  
+
+	  // joint references are calculated so they are constrained in the following order:
+	  // - (1) motorwheel angle is between its rotation limits.
+	  // - (2) keep the less change between the reference and the current joint state, by setting 
+	  //   the calculated reference or it's mirrored reference ( byt adding/substractin +/-M_PI
+	  //   to the motor_wheel orientation and switching the sign of the wheel speed.
+	  // - (3) keep the orientation between -M_PI/2 and +M_PI/2, so the encoders are below the base.
+	  // in the code, the constraints are checked in reversed order, so the more constraining (1) is checked at the end
+
 	  double x1 = L/2.0; double y1 = W/2.0;
 	  double wx1 = vx + w * y1;
 	  double wy1 = vy + w * x1;
-	  double q1 = - sign(wx1) * sqrt( wx1*wx1 + wy1*wy1 ); // spin for mirrored traction	   
+	  double q1 = - sign(wx1) * sqrt( wx1*wx1 + wy1*wy1 );  
 	  //double a1 = radnorm( atan2( wy1, wx1 ) );
-	  double a1 = radnormHalf( atan2( wy1,wx1 ));
+	  double a1 = radnormHalf( atan2( wy1,wx1 )); // contraint (3)
 	  double x2 = L/2.0; double y2 = W/2.0;
 	  double wx2 = vx - w * y2;
 	  double wy2 = vy + w * x2;
 	  double q2 = sign(wx2) * sqrt( wx2*wx2 + wy2*wy2 );
 	  //double a2 = radnorm( atan2( wy2, wx2 ) );
-	  double a2 = radnormHalf( atan2 (wy2,wx2));
+	  double a2 = radnormHalf( atan2 (wy2,wx2)); // contraint (3)
 	  double x3 = L/2.0; double y3 = W/2.0;
 	  double wx3 = vx - w * y3;
 	  double wy3 = vy - w * x3;
 	  double q3 = sign(wx3)*sqrt( wx3*wx3 + wy3*wy3 );
 	  //double a3 = radnorm( atan2( wy3, wx3 ) );
-	  double a3 = radnormHalf( atan2(wy3 , wx3));
+	  double a3 = radnormHalf( atan2(wy3 , wx3)); // contraint (3)
 	  double x4 = L/2.0; double y4 = W/2.0;
 	  double wx4 = vx + w * y4;
 	  double wy4 = vy - w * x4;
-	  double q4 = -sign(wx4)*sqrt( wx4*wx4 + wy4*wy4 ); // spin for mirrored traction
+	  double q4 = -sign(wx4)*sqrt( wx4*wx4 + wy4*wy4 );
 	  //double a4 = radnorm( atan2( wy4, wx4 ) );
-	  double a4 = radnormHalf( atan2(wy4,wx4));
+	  double a4 = radnormHalf( atan2(wy4,wx4)); // contraint (3)
 	  
+
+
+      //constraint (2)
+      normJointReference(q1,a1,joint_state_mean_[FRONT_RIGHT_W], joint_reference_[FRONT_RIGHT_MW]);
+      normJointReference(q2,a2,joint_state_mean_[FRONT_LEFT_W],  joint_reference_[FRONT_LEFT_MW]);
+      normJointReference(q3,a3,joint_state_mean_[BACK_LEFT_W],  joint_reference_[BACK_LEFT_MW]);
+      normJointReference(q4,a4,joint_state_mean_[BACK_RIGHT_W],   joint_reference_[BACK_RIGHT_MW]);
+
+      //constraint (1)
+      setJointReferenceBetweenMotorWheelLimits(q1, a1, FRONT_RIGHT_MW);
+      setJointReferenceBetweenMotorWheelLimits(q2, a2, FRONT_LEFT_MW);
+      setJointReferenceBetweenMotorWheelLimits(q3, a3, BACK_LEFT_MW);
+      setJointReferenceBetweenMotorWheelLimits(q4, a4, BACK_RIGHT_MW);
+
 	  //ROS_INFO("wy1 wx1 %5.2f %5.2f", wy1, wx1);
       //ROS_INFO_THROTTLE(1,"q1234=(%5.2f, %5.2f, %5.2f, %5.2f)   a1234=(%5.2f, %5.2f, %5.2f, %5.2f)", q1,q2,q3,q4, a1,a2,a3,a4);
 	
@@ -566,22 +664,47 @@ void OmniDrivePlugin::getJointReferences()
     }
   }
 
+
+  void OmniDrivePlugin::UpdateJointStateHistoryMean()
+  {
+    for (int i = 0; i < NUMBER_OF_JOINTS; i++) {
+        double sum = std::accumulate(joint_state_history_[i].begin(), joint_state_history_[i].end(), 0.0);
+        joint_state_mean_[i] = sum / joint_state_history_[i].size();
+    }
+
+    ROS_INFO_THROTTLE(1, "joint_state_mean: %2.5f %2.5f %2.5f %2.5f %2.5f %2.5f %2.5f %2.5f", joint_state_mean_[0],joint_state_mean_[1],joint_state_mean_[2],joint_state_mean_[3],joint_state_mean_[4],joint_state_mean_[5],joint_state_mean_[6],joint_state_mean_[7]);
+  }
+
   void OmniDrivePlugin::UpdateOdometryEncoder()
   {
 	// Linear speed of each wheel
 	double v1, v2, v3, v4; 
-	v1 = joints_[FRONT_RIGHT_W]->GetVelocity(0)  * (wheel_diameter_ / 2.0);
-	v2 = joints_[FRONT_LEFT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0);
-	v3 = joints_[BACK_LEFT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0);
-	v4 = joints_[BACK_RIGHT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0);
+	v1 = normToZero(joints_[FRONT_RIGHT_W]->GetVelocity(0)  * (wheel_diameter_ / 2.0));
+	v2 = normToZero(joints_[FRONT_LEFT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0));
+	v3 = normToZero(joints_[BACK_LEFT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0));
+	v4 = normToZero(joints_[BACK_RIGHT_W]->GetVelocity(0) * (wheel_diameter_ / 2.0));
 	// Angular pos of each wheel
     double a1, a2, a3, a4; 
     double aa2;
-    a1 = ( joints_[FRONT_RIGHT_MW]->GetAngle(0).Radian() );  
-    a2 = ( joints_[FRONT_LEFT_MW]->GetAngle(0).Radian() );
-    a3 = ( joints_[BACK_LEFT_MW]->GetAngle(0).Radian() );
-    a4 = ( joints_[BACK_RIGHT_MW]->GetAngle(0).Radian() );
-	  	        
+    a1 = normToZero( joints_[FRONT_RIGHT_MW]->GetAngle(0).Radian() );  
+    a2 = normToZero( joints_[FRONT_LEFT_MW]->GetAngle(0).Radian() );
+    a3 = normToZero( joints_[BACK_LEFT_MW]->GetAngle(0).Radian() );
+    a4 = normToZero( joints_[BACK_RIGHT_MW]->GetAngle(0).Radian() );
+
+
+	// keep a history of size N of the joint_states
+    joint_state_history_[FRONT_RIGHT_W].push_back(v1);
+    joint_state_history_[FRONT_LEFT_W].push_back(v2);
+    joint_state_history_[BACK_LEFT_W].push_back(v3);
+    joint_state_history_[BACK_RIGHT_W].push_back(v4);
+
+    joint_state_history_[FRONT_RIGHT_MW].push_back(radnorm(a1));
+    joint_state_history_[FRONT_LEFT_MW].push_back( radnorm(a2));
+    joint_state_history_[BACK_LEFT_MW].push_back( radnorm(a3));
+    joint_state_history_[BACK_RIGHT_MW].push_back(  radnorm(a4));
+
+	// calculate the mean of the history of each joint
+    UpdateJointStateHistoryMean();
 //    double v1x = -spin_ * v1 * cos( a1 ); double v1y = -spin_ * v1 * sin( a1 );  // spin for mirrored axes    
 //    double v2x = -v2 * cos( a2 ); double v2y = -v2 * sin( a2 );
 //    double v3x = -v3 * cos( a3 ); double v3y = -v3 * sin( a3 );
