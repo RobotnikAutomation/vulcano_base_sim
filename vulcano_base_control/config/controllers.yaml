@@ -19,21 +19,24 @@ joint_flw_velocity_controller:
   pid: {p: 1000.0, i: 0.01, d: 100.0}
 
 joint_blw_position_controller:
-  type: effort_controllers/JointPositionController
+  type: position_controllers/JointPositionController
   joint: back_left_motor_wheel_joint
   pid: {p: 100.0, i: 0.01, d: 10.0}
 
 joint_brw_position_controller:
-  type: effort_controllers/JointPositionController
+  type: position_controllers/JointPositionController
   joint: back_right_motor_wheel_joint
   pid: {p: 100.0, i: 0.01, d: 10.0}
 
 joint_frw_position_controller:
-  type: effort_controllers/JointPositionController
+  type: position_controllers/JointPositionController
   joint: front_right_motor_wheel_joint
   pid: {p: 100.0, i: 0.01, d: 10.0}
 
 joint_flw_position_controller:
-  type: effort_controllers/JointPositionController
+  type: position_controllers/JointPositionController
   joint: front_left_motor_wheel_joint
   pid: {p: 100.0, i: 0.01, d: 10.0}
+
+omni_drive_controller:
+  type: omni_drive_controller/OmniDriveController
