@@ -28,6 +28,7 @@
     <group if="$(arg gui)">
         <node name="rviz" type="rviz" pkg="rviz" args="-d $(find vulcano_base_description)/launch/vulcano_base.rviz" />
     </group>
+
   </group>
 
   <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
@@ -39,6 +40,5 @@
     <arg name="use_sim_time" value="true"/>
     <arg name="headless" value="false"/>
   </include>
-
 
 </launch>
